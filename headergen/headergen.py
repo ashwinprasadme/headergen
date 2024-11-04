@@ -21,6 +21,7 @@ from framework_models import PHASE_GROUPS
 from framework_models import PHASES as PIPELINE_PHASES
 from framework_models import get_high_level_phase, lookup_pipeline_tag
 from headergen.node_visitor import HeaderGenVisitor
+from framework_models.ml_function_classifier.CellClassifier import CellClassifier
 
 
 # %%
@@ -671,13 +672,30 @@ def get_analysis_output(nb_path, out_path="."):
     return analysis_info
 
 
-def start_headergen(nb_path, out_path=".", debug_mode=False, create_linted_file=True):
+def start_headergen(nb_path, out_path=".", debug_mode=False, create_linted_file=True, start_cellclassifer=False):
     # Read ipynb and convert to python for analysis
+    
+    
+    # implement the cellclassifier logic here
+    # Do classification or something here
+    
+    if start_cellclassifer:
+        cell_classifier = CellClassifier()
+        # Ashwin I need your help here:
+        # The usage of the cell_classifier is as follows:
+        # cell_classifier.predict_workflow_step(cell_code)
+        # It will first check if there a folder named cell_classifier exists, 
+        # if not it will create one and then download the pkl file to it 
+        # and then load it in the classifer attribute of the object
+        # The predict_workflow_step method will take a cell code as input and return the predicted workflow step - The names can be found in /framework_models/ml_function_classifier/CellClassifier.py
+        # I have added the code for the classifier in headergen, but I require your help to integrate it with the headergen code, where the predictions can be used to classify the cells
+        
     file_name = Path(nb_path).stem
     if Path(nb_path).suffix == ".py":
         py_ntbk_path = nb_path
         py_ntbk = open(py_ntbk_path).read()
     elif Path(nb_path).suffix == ".ipynb":
+        
         ntbk = jupytext.read(nb_path)
         py_ntbk = jupytext.writes(ntbk, fmt="py:percent")
         py_ntbk_path = "{}/{}-hg-analysis.py".format(Path(nb_path).parent, file_name)
