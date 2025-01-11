@@ -114,4 +114,4 @@ def types(input, output, json_output):
 @cli.command()
 def server():
     """Start Server"""
-    uvicorn.run(app, host="0.0.0.0", port=54068)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

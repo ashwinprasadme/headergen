@@ -92,7 +92,10 @@ class ImportManager(object):
             else:
                 for mod in ML_MODULES_TO_IMPORT:
                     importlib.invalidate_caches()
-                    self.module_imports[mod] = importlib.import_module(mod)
+                    try:
+                        self.module_imports[mod] = importlib.import_module(mod)
+                    except Exception as e:
+                        print(f"Failed to import {mod}")
                     importlib.invalidate_caches()
 
                 if CACHED_ML_MODULE_IMPORT:

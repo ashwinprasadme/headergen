@@ -90,6 +90,19 @@ PHASE_GROUPS = {
     ],
 }
 
+DASWOW_PHASES = {
+    "helper_functions": "Helper Functions",
+    "load_data": "Load Data",
+    "data_preprocessing": "Data Preprocessing",
+    "data_exploration": "Data Exploration",
+    "modelling": "Modelling",
+    "evaluation": "Evaluation",
+    "prediction": "Prediction",
+    "result_visualization": "Result Visualization",
+    "save_results": "Save Results",
+    "comment_only": "Comment Only",
+}
+
 
 def get_high_level_phase(phase):
     for _k, _v in PHASE_GROUPS.items():

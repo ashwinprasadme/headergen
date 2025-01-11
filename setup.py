@@ -34,7 +34,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="headergen",
-    version="1.3.1",
+    version="2.0.0",
     description="HeaderGen: Automated cell header generator",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

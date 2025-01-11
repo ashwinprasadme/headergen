@@ -17,7 +17,8 @@ from intervaltree import Interval, IntervalTree
 
 import headergen.static_analysis_helpers as sa_helpers
 import headergen.utils as utils
-from framework_models import PHASE_GROUPS
+from daswow.daswow_model import DASWOWInference
+from framework_models import DASWOW_PHASES, PHASE_GROUPS
 from framework_models import PHASES as PIPELINE_PHASES
 from framework_models import get_high_level_phase, lookup_pipeline_tag
 from headergen.node_visitor import HeaderGenVisitor
@@ -218,7 +219,12 @@ def deep_sorted(obj, *, key=None, reverse=False):
 
 
 def add_phase_info_to_source(
-    py_ntbk, block_mapping, ml_phases_data, imports_info, function_call_doc_strings
+    py_ntbk,
+    block_mapping,
+    ml_phases_data,
+    imports_info,
+    function_call_doc_strings,
+    code_cell_mapped_labels,
 ):
     lineno = find_first_block_start(py_ntbk)
     start_block = 1
@@ -232,7 +238,7 @@ def add_phase_info_to_source(
     top_phase_string_empty = "<ul><li><details><summary style='list-style: none;'><s>{phase}</s> (no calls found)</summary>\n<ul>\n\n{cell_list}\n\n</ul>\n</details></li></ul>"
     top_phase_string_high_level = "<li><details><summary style='list-style: none; cursor: pointer;'><h3><span style='color:#42a5f5'>{phase}</span></h3></summary>\n<ul>\n\n{cell_list}\n\n</ul>\n</details></li>"
     top_phase_string_high_level_empty = "<li><details><summary style='list-style: none;'><h3><span style='color:#42a5f5'>{phase}</span></h3></summary>\n<ul>\n\n{cell_list}\n\n</ul>\n</details></li>"
-    cell_lib_string = "<li><details open><summary style='list-style: none; cursor: pointer;'><strong><u>Cell # {cell_id}</u></strong></summary><small><a href=#{cell_id}>goto cell # {cell_id}</a></small>\n<ul>\n\n{lib_list}\n\n</ul>\n</details></li>"
+    cell_lib_string = "<li><details><summary style='list-style: none; cursor: pointer;'><strong><u>Cell # {cell_id}</u></strong></summary><small><a href=#{cell_id}>goto cell # {cell_id}</a></small>\n<ul>\n\n{lib_list}\n\n</ul>\n</details></li>"
     cell_lib_string_empty = "<li><details><summary style='list-style: none;'><b>Cell # {cell_id}</b></summary><small><a href=#{cell_id}>goto cell # {cell_id}</a></small>\n<i>No function calls found in the cell</i>\n</details></li>"
     phase_all_lib_string = "<li><details><summary style='list-style: none; cursor: pointer;'><u>{cell_id}</u></summary>\n<ul>\n\n{lib_list}\n\n</ul>\n</details></li>"
     # cell_list = "<li> <a href='#{cell_id}'><b>Cell # {cell_id}</b></a></li>"
@@ -240,50 +246,18 @@ def add_phase_info_to_source(
     top_doc_string = "<details><summary style='list-style: none; cursor: pointer;'><strong>View All ML API Calls in Notebook</strong></summary>\n<ul>\n\n{}\n\n</ul>\n</details>"
 
     lib_list = "<li> <b>{}</b>\n<ul>\n{}\n</ul>\n</li>"
-    ind_list = "<li>\n<details><summary style='list-style: none; cursor: pointer;'><u>{}</u></summary>\n<blockquote>\n<code>\n{}\n\n</code>\n<a href='#top_phases'>back to header</a>\n</blockquote>\n</details>\n</li>"
-    ind_args_list_empty = "<li>\n<details><summary style='list-style: none; cursor: pointer;'><u>{}</u> | {} </summary>\n<blockquote>\n<code>\n{}\n\n</code>\n<a href='#top_phases'>back to header</a>\n</blockquote>\n</details>\n</li>"
-    ind_args_list = "<li>\n<details><summary style='list-style: none; cursor: pointer;'><u>{}</u> | <b>(See Args)</b> </summary> {}\n<blockquote>\n<code>\n{}\n\n</code>\n<a href='#top_phases'>back to header</a>\n</blockquote>\n</details>\n</li>"
+    ind_list = "<li>\n<details><summary style='list-style: none; cursor: pointer;'><u>{}</u></summary>\n<blockquote>\n</blockquote>\n</details>\n</li>"
+    ind_args_list_empty = "<li>\n<details><summary style='list-style: none; cursor: pointer;'><u>{}</u> | {} </summary>\n<blockquote>\n</blockquote>\n</details>\n</li>"
+    ind_args_list = "<li>\n<details><summary style='list-style: none; cursor: pointer;'><u>{}</u> | <b>(See Args)</b> </summary> {}\n<blockquote>\n</blockquote>\n</details>\n</li>"
 
-    selected_phases = [
-        # PIPELINE_PHASES["LIBRARY_LOADING"],
-        PIPELINE_PHASES["VISUALIZATION"],
-        PIPELINE_PHASES["DATA_CLEANING_PREPARATION"],
-        PIPELINE_PHASES["DATA_PROFILING_AND_EXPLORATORY_DATA_ANALYSIS"],
-        PIPELINE_PHASES["DATA_CLEANING_FILTERING"],
-        PIPELINE_PHASES["DATA_SUB_SAMPLING_AND_TRAIN_TEST_SPLITTING"],
-        PIPELINE_PHASES["FEATURE_ENGINEERING"],
-        PIPELINE_PHASES["FEATURE_TRANSFORMATION"],
-        PIPELINE_PHASES["FEATURE_SELECTION"],
-        PIPELINE_PHASES["MODEL_BUILDING_AND_TRAINING"],
-        PIPELINE_PHASES["MODEL_TRAINING"],
-        PIPELINE_PHASES["MODEL_PARAMETER_TUNING"],
-        PIPELINE_PHASES["MODEL_VALIDATION_AND_ASSEMBLING"],
-    ]
-
-    GROUP_PHASES = False
-
-    phase_cell_mapping = {k: [] for k in selected_phases}
+    phase_cell_mapping = {k: [] for k in DASWOW_PHASES.keys()}
     for _block_key, _block_value in block_mapping.items():
-        if "dl_pipeline_tag" not in block_mapping[_block_key]:
-            continue
-        if GROUP_PHASES:
-            phases = [
-                get_high_level_phase(_p)
-                for _p in block_mapping[_block_key]["dl_pipeline_tag"]
-            ]
-        else:
-            phases = block_mapping[_block_key]["dl_pipeline_tag"]
+        cell_phases = code_cell_mapped_labels.get(_block_key, [])
 
-        for _phase in selected_phases:
-            if _phase in phases:
+        for _phase in DASWOW_PHASES.keys():
+            if _phase in cell_phases:
                 # if _phase in _block_value["dl_pipeline_tag"]:
                 phase_cell_mapping[_phase].append(_block_key)
-                # Also add to high-level category
-                high_level_phase = get_high_level_phase(_phase)
-                if high_level_phase in phase_cell_mapping:
-                    if _block_key not in phase_cell_mapping[high_level_phase]:
-                        phase_cell_mapping[high_level_phase].append(_block_key)
-                # print(_phase, "in", _block_key)
 
     # Add imports info to markdown
     imports_info = list(set([x.split(".")[0] for x in imports_info]))
@@ -307,7 +281,7 @@ def add_phase_info_to_source(
 
         return args_list
 
-    def get_filtered_lib_list(function_list, phase, cell):
+    def get_lib_list(function_list, phase, cell):
         # lib_list =
         classified_funcs = get_library_classified(function_list)
 
@@ -315,22 +289,19 @@ def add_phase_info_to_source(
         for _lib, _calls in classified_funcs.items():
             _calls_template = []
             for _c, _ds in _calls.items():
-                if phase in lookup_pipeline_tag(_c):
-                    args_list = get_args_func(_c, cell)
-                    if args_list:
-                        _str = "\n".join(
-                            [
-                                f"<ul><li><b>Args:</b> {x['args']} | <b>Kwargs:</b> {x['kwargs']}</li></ul>"
-                                for x in args_list
-                            ]
-                        )
-                        _calls_template.append(ind_args_list.format(_c, _str, _ds))
-                        # _str = "\n".join([f"<ul><li><b>Args:</b> {x['args']} </li><li> <b>Kwargs:</b> {x['kwargs']}</li></ul>" for x in args_list])
-                    else:
-                        _str = "(No Args Found)"
-                        _calls_template.append(
-                            ind_args_list_empty.format(_c, _str, _ds)
-                        )
+                args_list = get_args_func(_c, cell)
+                if args_list:
+                    _str = "\n".join(
+                        [
+                            f"<ul><li><b>Args:</b> {x['args']} | <b>Kwargs:</b> {x['kwargs']}</li></ul>"
+                            for x in args_list
+                        ]
+                    )
+                    _calls_template.append(ind_args_list.format(_c, _str))
+                    # _str = "\n".join([f"<ul><li><b>Args:</b> {x['args']} </li><li> <b>Kwargs:</b> {x['kwargs']}</li></ul>" for x in args_list])
+                else:
+                    _str = "(No Args Found)"
+                    _calls_template.append(ind_args_list_empty.format(_c, _str))
 
             if _calls_template:
                 _lib_list.append(lib_list.format(_lib, "\n".join(_calls_template)))
@@ -345,7 +316,7 @@ def add_phase_info_to_source(
             if _cell in ml_phases_data:
                 _all_phase_calls = _all_phase_calls | block_mapping[_cell]["doc_string"]
                 if ml_phases_data[_cell]:
-                    filtered_calls = get_filtered_lib_list(
+                    filtered_calls = get_lib_list(
                         block_mapping[_cell]["doc_string"], _phase, _cell
                     )
                     if filtered_calls:
@@ -357,59 +328,23 @@ def add_phase_info_to_source(
                     else:
                         _cell_list.append(
                             cell_lib_string.format(
-                                cell_id=_cell, lib_list="Code pattern match"
+                                cell_id=_cell, lib_list="No function calls found"
                             )
                         )
 
-                        # It is a pattern match
-            #     else:
-            #         _cell_list.append(cell_lib_string_empty.format(cell_id=_cell))
-            # else:
-            #     _cell_list.append(cell_lib_string_empty.format(cell_id=_cell))
-
-        if _all_phase_calls:
-            all_calls_filtered = get_filtered_lib_list(_all_phase_calls, _phase, _cell)
-            if all_calls_filtered:
-                _cell_list.insert(
-                    0,
-                    phase_all_lib_string.format(
-                        cell_id=f'View All "{_phase}" Calls',
-                        lib_list="\n".join(all_calls_filtered),
-                    ),
-                )
-
         if _cell_list:
-            if _phase in [
-                PIPELINE_PHASES["DATA_CLEANING_PREPARATION"],
-                PIPELINE_PHASES["FEATURE_ENGINEERING"],
-                PIPELINE_PHASES["MODEL_BUILDING_AND_TRAINING"],
-            ]:
-                markdown_block.append(
-                    top_phase_string_high_level.format(
-                        phase=_phase, cell_list="\n".join(_cell_list)
-                    )
+            markdown_block.append(
+                top_phase_string.format(
+                    phase=DASWOW_PHASES.get(_phase, "Unknown"),
+                    cell_list="\n".join(_cell_list),
                 )
-            else:
-                markdown_block.append(
-                    top_phase_string.format(
-                        phase=_phase, cell_list="\n".join(_cell_list)
-                    )
-                )
+            )
         else:
-            if _phase in [
-                PIPELINE_PHASES["DATA_CLEANING_PREPARATION"],
-                PIPELINE_PHASES["FEATURE_ENGINEERING"],
-                PIPELINE_PHASES["MODEL_BUILDING_AND_TRAINING"],
-            ]:
-                markdown_block.append(
-                    top_phase_string_high_level_empty.format(
-                        phase=_phase, cell_list="None"
-                    )
+            markdown_block.append(
+                top_phase_string_empty.format(
+                    phase=DASWOW_PHASES.get(_phase, "Unknown"), cell_list="None"
                 )
-            else:
-                markdown_block.append(
-                    top_phase_string_empty.format(phase=_phase, cell_list="None")
-                )
+            )
 
     # close high level list
     markdown_block.append("</ul>\n<hr>\n")
@@ -570,9 +505,9 @@ def get_cell_summaries(py_ntbk, hg_visitor):
                             ] = _func_ds
 
                         if _lineno in hg_visitor.call_args_line_no:
-                            block_mapping[_block_key]["call_args"][_lineno] = (
-                                hg_visitor.call_args_line_no[_lineno]
-                            )
+                            block_mapping[_block_key]["call_args"][
+                                _lineno
+                            ] = hg_visitor.call_args_line_no[_lineno]
 
             else:
                 if (
@@ -705,6 +640,14 @@ def start_headergen(nb_path, out_path=".", debug_mode=False, create_linted_file=
     if Path(nb_path).suffix == ".ipynb":
         block_mapping, cell_callsites_mapping = get_cell_summaries(py_ntbk, hg_visitor)
         code_block_mapping = find_code_block_numbers(py_ntbk)
+        daswow_model = DASWOWInference(nb_path=nb_path)
+        cell_labels = daswow_model.predict()
+        code_cell_mapped_labels = {k: v for k, v in enumerate(cell_labels, start=1)}
+
+        # overriide tags with cell labels
+        for block_key, block_value in block_mapping.items():
+            cell_label = code_cell_mapped_labels.get(code_block_mapping[block_key], [])
+            block_mapping[block_key]["dl_pipeline_tag"] = cell_label
 
         if create_linted_file:
             py_ntbk_linted, block_mapping_linted = py_ntbk, block_mapping
@@ -720,16 +663,13 @@ def start_headergen(nb_path, out_path=".", debug_mode=False, create_linted_file=
                 PIPELINE_PHASES["FUNCTION_DEFINITION"],
             ]
             for _block_key, _block_value in block_mapping_linted.items():
-                # print(_block_key)
-                # _top_tag = block_mapping_linted[_block_key]["dl_pipeline_tag_counter"].most_common(1)[0][0]
-                # Build heading string from dict with filtering
-                high_level_phases = [
-                    get_high_level_phase(_phase)
-                    for _phase in block_mapping_linted[_block_key]["dl_pipeline_tag"]
-                ]
+                cell_label = code_cell_mapped_labels.get(
+                    code_block_mapping[_block_key], []
+                )
+
                 _top_tag = " | ".join(
-                    f"{key}"
-                    for key in sorted(set(high_level_phases))
+                    f"{DASWOW_PHASES.get(key, 'Unknown')}"
+                    for key in sorted(set(cell_label))
                     if key not in filtered_tags
                 )
                 # Markdown tag with function call count
@@ -760,6 +700,7 @@ def start_headergen(nb_path, out_path=".", debug_mode=False, create_linted_file=
                 ml_phases_data,
                 analysis_info["imports_info"],
                 analysis_info["function_doc_strings"],
+                code_cell_mapped_labels,
             )
 
             # %%

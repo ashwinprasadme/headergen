@@ -1,128 +1,91 @@
-import errno
 import logging
 import os
-import shutil
-import time
-from pathlib import Path
-from typing import Any, Dict
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+import aiofiles
+import nbformat
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
-from framework_models import PHASES, get_high_level_phase, lookup_pipeline_tag
+from framework_models import get_high_level_phase
 from headergen import headergen
 
-out_path = r"/tmp"
-
 app = FastAPI()
-RETRY_SLEEP = 0.25
-DEBUG_MODE = False
+
+UPLOAD_DIR = "uploads"
+OUTPUT_DIR = "output"
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# Enable GZip compression
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-def is_path_safe(file_path):
-    if not file_path:
-        return False, "'file_path' is empty"
-    if not Path(file_path).is_absolute():
-        return False, "'file_path' is relative. Use absolute."
-    if not Path(file_path).suffix in [".ipynb", ".py"]:
-        return False, "'file_path' is not a notebook."
-    # TODO:
-    # Add safe dir to avoid traversal attacks
+@app.post("/get_analysis_notebook/")
+async def get_analysis(file: UploadFile = File(...)):
+    """Upload a notebook file, analyze chunks of it, and add metadata."""
+    # Save the uploaded file to the uploads directory
+    file_location = f"{UPLOAD_DIR}/{file.filename}"
 
-    return True, "ok"
+    async with aiofiles.open(file_location, "wb") as f:
+        content = await file.read()
+        await f.write(content)
 
+    # Load the notebook
+    async with aiofiles.open(file_location, "r", encoding="utf-8") as file:
+        notebook_content = await file.read()
+        notebook = nbformat.reads(notebook_content, as_version=4)
 
-@app.get("/")
-def read_root():
-    return "HeaderGen"
-
-
-@app.get("/get_types")
-def get_types(file_path: str = ""):
-    is_safe = is_path_safe(file_path)
-    if not is_safe[0]:
-        return is_safe[1]
-    else:
-        analysis_meta = headergen.get_analysis_output(str(file_path), out_path)
-
-    return analysis_meta["types_formatted"]
-
-
-@app.get("/get_cs")
-def get_types(file_path: str = ""):
-    is_safe = is_path_safe(file_path)
-    if not is_safe[0]:
-        return is_safe[1]
-    else:
-        analysis_meta = headergen.get_analysis_output(str(file_path), out_path)
-
-    return analysis_meta["pycg_output"]
-
-
-@app.get("/get_analysis_notebook")
-def get_analysis(file_path: str = ""):
-    is_safe = is_path_safe(file_path)
-    if not is_safe[0]:
-        return is_safe[1]
-    else:
+    # Perform analysis on the uploaded notebook
+    try:
         analysis_meta = headergen.start_headergen(
-            str(file_path), out_path, debug_mode=DEBUG_MODE
+            file_location, OUTPUT_DIR, debug_mode=True
         )
+    except Exception as e:
+        logger.error(f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
-    analysis_output = {
-        "cell_callsites": analysis_meta["cell_callsites"],
-        "block_mapping": {},
-    }
+    # Prepare the analysis output in a chunked dictionary, mapping analysis to cells
+    analysis_output = {"cell_mapping": {}}
 
     if "block_mapping" in analysis_meta:
-        for _cell, _cell_results in analysis_meta["block_mapping"].items():
-            analysis_output["block_mapping"][_cell] = list(
-                set(
-                    [
-                        get_high_level_phase(x)
-                        for x in _cell_results["dl_pipeline_tag_counter"]
-                        if x
-                        not in ["Unknown", "Function Definition", "Builtin Function"]
-                    ]
-                )
-            )
+        for cell_index, cell_results in analysis_meta["block_mapping"].items():
+            # Get high-level phases and convert set to list
+            ml_phases = list(set(cell_results["dl_pipeline_tag"]))
+            func_list = cell_results.get("doc_string", "")
 
-    return analysis_output
+            # Add to the chunked dictionary without modifying the content
+            analysis_output["cell_mapping"][cell_index] = {
+                "ml_phase": ml_phases,  # Ensure ml_phases is a list, not a set
+                "functions": func_list,
+            }
 
-
-@app.post("/get_ml_labels")
-def get_ml_labels(payload: Dict[Any, Any]):
-    result = {}
-    for func, doc_string in payload.items():
-        if "docstring" in doc_string:
-            result[func] = [
-                get_high_level_phase(x)
-                for x in lookup_pipeline_tag(func, doc_string["docstring"])
-            ]
-        else:
-            result[func] = [PHASES["UNKNOWN"]]
-
-    return result
-
-
-@app.get("/generate_annotated_notebook")
-def generate_annotated_notebook(file_path: str = ""):
-    is_safe = is_path_safe(file_path)
-    if not is_safe[0]:
-        return is_safe[1]
-    else:
-        analysis_meta = headergen.start_headergen(
-            str(file_path), out_path, debug_mode=DEBUG_MODE
-        )
-        return FileResponse(
-            analysis_meta["out_file"],
-            media_type="application/octet-stream",
-            filename=Path(analysis_meta["out_file"]).name,
-        )
+    # Return the chunked analysis output without overwriting notebook content
+    return JSONResponse(content=analysis_output)
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=54068)
+    import uvicorn
 
-# uvicorn --reload --host 0.0.0.0 --port 8080 main:app
+    uvicorn.run("server:app", host="0.0.0.0", port=8000)
+
+# Example curl request to use get_analysis_notebook with a file path
+# Replace 'your_notebook.ipynb' with the path to your actual notebook file
+# curl -X POST "http://localhost:8000/get_analysis_notebook/" \
+#     -H "accept: application/json" \
+#     -H "Content-Type: multipart/form-data" \
+#     -F "file=@/mnt/Projects/PhD/Research/HeaderGen/git_sources/headergen_githib/.scrapy/notebooks/01-keras-deep-learning-to-solve-titanic.ipynb"

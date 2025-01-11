@@ -387,3 +387,4 @@ callsites-jupyternb-real-world-benchmark/notebooks/*.py
 evaluation/extended_dataset/DASWOW_dataset_fixed.csv
 .~lock*
 scripts/results
+daswow/models/

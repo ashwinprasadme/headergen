@@ -34,3 +34,5 @@ line_profiler
 psycopg2-binary
 redis
 nibabel
+aiofiles
+python-multipart
