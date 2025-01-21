@@ -25,9 +25,13 @@ def download_models_from_github_release(repo_owner="secure-software-engineering"
         os.makedirs(download_path)
     
     # check if files already exist and remove from the list
+    assets_to_download = []
     for asset_name in asset_names:
-        if os.path.exists(os.path.join(download_path, asset_name)):
-            asset_names.remove(asset_name)
+        if not os.path.exists(os.path.join(download_path, asset_name)):
+            assets_to_download.append(asset_name)
+
+    if not assets_to_download:
+        return "Models already exist" 
 
     # API endpoint to get release info
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/tags/{release_tag}"
@@ -41,7 +45,7 @@ def download_models_from_github_release(repo_owner="secure-software-engineering"
     for asset in release_data['assets']:
         print(asset['name'])  # Add this line
 
-    for asset_name in asset_names:
+    for asset_name in assets_to_download:
         # Find the download URL of the asset
         asset_url = None
         for asset in release_data['assets']:
@@ -53,6 +57,7 @@ def download_models_from_github_release(repo_owner="secure-software-engineering"
             raise ValueError(f"Asset '{asset_name}' not found in the release.")
 
         # Download the file
+        print(f"Downloading model file: {asset['name']}")
         response = requests.get(asset_url, stream=True)
         response.raise_for_status()
 

@@ -14,7 +14,7 @@ from headergen import headergen
 script_dir = os.path.abspath(os.path.dirname(__file__))
 
 # Careful, the out_path folder will be removed
-file_path = f"/mnt/Projects/PhD/Research/HeaderGen/git_sources/HeaderGen_github/.scrapy/test/test.py"
+file_path = f"/mnt/Projects/PhD/Research/HeaderGen/git_sources/headergen_githib/.scrapy/notebooks/01-keras-deep-learning-to-solve-titanic.ipynb"
 out_path = f"{script_dir}/results/"
 
 

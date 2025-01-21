@@ -12,6 +12,7 @@ from daswow.model_download import download_models_from_github_release
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 MODELS_PATH = os.path.join(SCRIPT_DIR, "models")
 
+download_models_from_github_release()
 
 class Preprocessing:
     # init. set dataframe to be processed
@@ -89,8 +90,6 @@ class DASWOWInference:
     def __init__(self, nb_path, models_path=MODELS_PATH):
         cf = CellFeatures()
         self.df = cf.get_cell_features_nb(nb_path)
-
-        download_models_from_github_release()
 
         self.preprocesser = Preprocessing(self.df)
         self.model = joblib.load(f"{models_path}/rf_code_scaled.pkl")
