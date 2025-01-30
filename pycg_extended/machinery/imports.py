@@ -248,14 +248,15 @@ class ImportManager(object):
                     else:
                         del sys.modules[mn]
                         try:
-                            del sys.modules[parent_lib]
+                            if parent_lib not in ML_MODULES_TO_IMPORT:
+                                del sys.modules[parent_lib]
                         except:
                             pass
                 # sys.path_importer_cache.clear()
                 sys.path.insert(0, os.path.abspath(self.mod_dir))
-                mod = self._do_import(mn, pkg)
                 # HACK: also import parent model, can avoid this?
                 self._do_import(parent_lib, "")
+                mod = self._do_import(mn, pkg)
                 break
             except Exception as e:
                 continue

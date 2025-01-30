@@ -955,6 +955,12 @@ class TypeStubManager:
                                 if not _ret_type == "NoneType":
                                     _return_types.append(_ret_type)
                         else:
+                            # TODO: Return multiple types
+                            # if _def.return_type.name == "tuple":
+                            #     for d in _def.return_type.parameters:
+                            #         _return_types.append(d.name)
+                            # else:
+                            #     _return_types.append(_def.return_type.name)
                             _return_types.append(_def.return_type.name)
                 res_dict = {
                     "return_type": list(set(_return_types)),

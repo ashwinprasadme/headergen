@@ -184,7 +184,7 @@ class CellFeatures:
         language_version = None
         if "language_info" in metadata_keys:
             language = data["metadata"]["language_info"]["name"]
-            language_version = data["metadata"]["language_info"]["version"]
+            language_version = data["metadata"]["language_info"].get("version", None)
         elif "language" in metadata_keys:
             language = data["metadata"]["language"]
             language_version = data["metadata"]["language"]
@@ -532,9 +532,9 @@ class CellFeatures:
                     temp_df["code_line_after"] = code_line_after
                     temp_df.to_pickle(self.store_path + file_name + ".pkl")
                     print("storing pickle in", self.store_path + file_name + ".pkl")
-            except:
-                pass
+            except Exception as e:
                 print("unable to extract data from the file ", file_name)
+                print(e)
         except:
             print("File not there", file_name)
 
